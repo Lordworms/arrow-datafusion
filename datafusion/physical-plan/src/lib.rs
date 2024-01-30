@@ -224,6 +224,7 @@ pub trait ExecutionPlan: Debug + DisplayAs + Send + Sync {
     /// See also [`Self::maintains_input_order`] and [`Self::output_ordering`]
     /// for related concepts.
     fn equivalence_properties(&self) -> EquivalenceProperties {
+        println!("self.schema is {:?}", self.schema());
         EquivalenceProperties::new(self.schema())
     }
 
@@ -478,7 +479,17 @@ pub fn with_new_children_if_necessary(
     plan: Arc<dyn ExecutionPlan>,
     children: Vec<Arc<dyn ExecutionPlan>>,
 ) -> Result<Transformed<Arc<dyn ExecutionPlan>>> {
+    println!(
+        "*********current plan is {}\n",
+        displayable(plan.clone().as_ref()).indent(false)
+    );
     let old_children = plan.children();
+    for plan in children.iter() {
+        println!(
+            "*********child plan is {}\n",
+            displayable(plan.clone().as_ref()).indent(false)
+        );
+    }
     if children.len() != old_children.len() {
         internal_err!("Wrong number of children")
     } else if children.is_empty()

@@ -37,6 +37,11 @@ pub fn add_sort_above(
     sort_requirement: LexRequirementRef,
     fetch: Option<usize>,
 ) {
+    println!("------------{:?}", sort_requirement);
+    println!("{:?}", node);
+    println!("{:?}", fetch);
+    let eq_properties = node.equivalence_properties();
+    println!("{:?}", eq_properties);
     // If the ordering requirement is already satisfied, do not add a sort.
     if !node
         .equivalence_properties()

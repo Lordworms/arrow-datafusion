@@ -139,6 +139,7 @@ impl EquivalenceProperties {
     /// Normalization removes constants and duplicates as well as standardizing
     /// expressions according to the equivalence group within.
     pub fn normalized_oeq_class(&self) -> OrderingEquivalenceClass {
+        println!("self.oeq_class is {:?}", self.oeq_class);
         OrderingEquivalenceClass::new(
             self.oeq_class
                 .iter()
@@ -224,10 +225,13 @@ impl EquivalenceProperties {
     /// normalize to `vec![a ASC, c ASC, a ASC]` and end up with the final result
     /// after deduplication.
     fn normalize_sort_exprs(&self, sort_exprs: LexOrderingRef) -> LexOrdering {
+        println!("{:?}", sort_exprs);
         // Convert sort expressions to sort requirements:
         let sort_reqs = PhysicalSortRequirement::from_sort_exprs(sort_exprs.iter());
+        println!("{:?}", sort_reqs);
         // Normalize the requirements:
         let normalized_sort_reqs = self.normalize_sort_requirements(&sort_reqs);
+        println!("{:?}", normalized_sort_reqs);
         // Convert sort requirements back to sort expressions:
         PhysicalSortRequirement::to_sort_exprs(normalized_sort_reqs)
     }
@@ -250,7 +254,9 @@ impl EquivalenceProperties {
         sort_reqs: LexRequirementRef,
     ) -> LexRequirement {
         let normalized_sort_reqs = self.eq_group.normalize_sort_requirements(sort_reqs);
+        println!("{:?}", normalized_sort_reqs);
         let constants_normalized = self.eq_group.normalize_exprs(self.constants.clone());
+        println!("{:?}", constants_normalized);
         // Prune redundant sections in the requirement:
         collapse_lex_req(
             normalized_sort_reqs
@@ -275,13 +281,18 @@ impl EquivalenceProperties {
     /// existing orderings.
     pub fn ordering_satisfy_requirement(&self, reqs: LexRequirementRef) -> bool {
         let mut eq_properties = self.clone();
+        println!("{:?}", eq_properties);
         // First, standardize the given requirement:
         let normalized_reqs = eq_properties.normalize_sort_requirements(reqs);
+        println!("{:?}", normalized_reqs);
         for normalized_req in normalized_reqs {
             // Check whether given ordering is satisfied
+            println!("{:?}", self.oeq_class);
+            println!("-------------------------------------------");
             if !eq_properties.ordering_satisfy_single(&normalized_req) {
                 return false;
             }
+            println!("---------------------------------------------");
             // Treat satisfied keys as constants in subsequent iterations. We
             // can do this because the "next" key only matters in a lexicographical
             // ordering when the keys to its left have the same values.
@@ -294,6 +305,8 @@ impl EquivalenceProperties {
             // From the analysis above, we know that `[a ASC]` is satisfied. Then,
             // we add column `a` as constant to the algorithm state. This enables us
             // to deduce that `(b + c) ASC` is satisfied, given `a` is constant.
+            println!("{}", normalized_req.expr);
+            println!("{}", normalized_req);
             eq_properties =
                 eq_properties.add_constants(std::iter::once(normalized_req.expr));
         }
@@ -313,8 +326,12 @@ impl EquivalenceProperties {
     ///
     /// Returns `true` if the specified ordering is satisfied, `false` otherwise.
     fn ordering_satisfy_single(&self, req: &PhysicalSortRequirement) -> bool {
+        println!("{:?}", req);
         let expr_ordering = self.get_expr_ordering(req.expr.clone());
         let ExprOrdering { expr, state, .. } = expr_ordering;
+        println!("expr is {:?}", expr);
+        println!("state is {:?}", state);
+        println!("req is {:?}", req);
         match state {
             SortProperties::Ordered(options) => {
                 let sort_expr = PhysicalSortExpr { expr, options };
@@ -478,8 +495,11 @@ impl EquivalenceProperties {
     /// ```
     fn construct_dependency_map(&self, mapping: &ProjectionMapping) -> DependencyMap {
         let mut dependency_map = HashMap::new();
+        println!("{:?}", self.normalized_oeq_class());
+        println!("-----eq group is {:?}", self.eq_group);
         for ordering in self.normalized_oeq_class().iter() {
             for (idx, sort_expr) in ordering.iter().enumerate() {
+                println!("------idx is {:?} \n and sort_expr is {:?}", idx, sort_expr);
                 let target_sort_expr =
                     self.project_expr(&sort_expr.expr, mapping).map(|expr| {
                         PhysicalSortExpr {
@@ -487,6 +507,7 @@ impl EquivalenceProperties {
                             options: sort_expr.options,
                         }
                     });
+                println!("-------target sort expr is  {:?}", target_sort_expr);
                 let is_projected = target_sort_expr.is_some();
                 if is_projected
                     || mapping
@@ -497,6 +518,7 @@ impl EquivalenceProperties {
                     // dependency for a leading ordering (i.e. the first sort
                     // expression).
                     let dependency = idx.checked_sub(1).map(|a| &ordering[a]);
+                    println!("dependency is {:?}", dependency);
                     // Add sort expressions that can be projected or referred to
                     // by any of the projection expressions to the dependency map:
                     dependency_map
@@ -514,6 +536,7 @@ impl EquivalenceProperties {
                 }
             }
         }
+        println!("{:?}", dependency_map);
         dependency_map
     }
 
@@ -560,11 +583,12 @@ impl EquivalenceProperties {
     ///
     /// A vector of `LexOrdering` containing all valid orderings after projection.
     fn projected_orderings(&self, mapping: &ProjectionMapping) -> Vec<LexOrdering> {
+        println!("{:?}", mapping);
         let mapping = self.normalized_mapping(mapping);
-
+        println!("{:?}", mapping);
         // Get dependency map for existing orderings:
         let dependency_map = self.construct_dependency_map(&mapping);
-
+        println!("{:?}", dependency_map);
         let orderings = mapping.iter().flat_map(|(source, target)| {
             referred_dependencies(&dependency_map, source)
                 .into_iter()
@@ -593,7 +617,6 @@ impl EquivalenceProperties {
                     dependency_orderings
                 })
         });
-
         // Add valid projected orderings. For example, if existing ordering is
         // `a + b` and projection is `[a -> a_new, b -> b_new]`, we need to
         // preserve `a_new + b_new` as ordered. Please note that `a_new` and
@@ -648,6 +671,7 @@ impl EquivalenceProperties {
             .iter()
             .flat_map(|expr| self.eq_group.project_expr(mapping, expr))
             .collect::<Vec<_>>();
+        println!("{:?}", projected_constants);
         // Add projection expressions that are known to be constant:
         for (source, target) in mapping.iter() {
             if self.is_expr_constant(source)
@@ -666,9 +690,14 @@ impl EquivalenceProperties {
         projection_mapping: &ProjectionMapping,
         output_schema: SchemaRef,
     ) -> Self {
+        println!("{:?}", projection_mapping);
+        println!("{:?}", output_schema);
         let projected_constants = self.projected_constants(projection_mapping);
+        println!("projected constants is {:?}", projected_constants);
         let projected_eq_group = self.eq_group.project(projection_mapping);
+        println!("projected_eq_group {:?}", projected_eq_group);
         let projected_orderings = self.projected_orderings(projection_mapping);
+        println!("projected_ordering is \n {:?}", projected_orderings);
         Self {
             eq_group: projected_eq_group,
             oeq_class: OrderingEquivalenceClass::new(projected_orderings),
@@ -776,6 +805,7 @@ impl EquivalenceProperties {
     /// Returns an `ExprOrdering` object containing the ordering information for
     /// the given expression.
     pub fn get_expr_ordering(&self, expr: Arc<dyn PhysicalExpr>) -> ExprOrdering {
+        println!("{:?}", expr);
         ExprOrdering::new(expr.clone())
             .transform_up(&|expr| Ok(update_ordering(expr, self)))
             // Guaranteed to always return `Ok`.
@@ -801,6 +831,9 @@ fn update_ordering(
 ) -> Transformed<ExprOrdering> {
     // We have a Column, which is one of the two possible leaf node types:
     let normalized_expr = eq_properties.eq_group.normalize_expr(node.expr.clone());
+    println!("normalized_expr: {}", normalized_expr);
+    println!("node is {:?}", node);
+    println!("eq_properties is {:?}", eq_properties);
     if eq_properties.is_expr_constant(&normalized_expr) {
         node.state = SortProperties::Singleton;
     } else if let Some(options) = eq_properties

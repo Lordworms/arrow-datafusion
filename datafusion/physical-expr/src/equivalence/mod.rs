@@ -33,6 +33,7 @@ use std::sync::Arc;
 /// `vec![a Some(ASC), a Some(DESC)]` collapses to `vec![a Some(ASC)]`.
 pub fn collapse_lex_req(input: LexRequirement) -> LexRequirement {
     let mut output = Vec::<PhysicalSortRequirement>::new();
+    println!("{:?}", input);
     for item in input {
         if !output.iter().any(|req| req.expr.eq(&item.expr)) {
             output.push(item);

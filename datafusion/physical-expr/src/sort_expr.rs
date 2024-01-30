@@ -83,6 +83,10 @@ impl PhysicalSortExpr {
     ) -> bool {
         // If the column is not nullable, NULLS FIRST/LAST is not important.
         let nullable = self.expr.nullable(schema).unwrap_or(true);
+        println!("{:?}", schema);
+        println!("{:?}", requirement);
+        println!("requirement.expr : {:?}", &requirement.expr);
+        println!("{:?}", self.expr);
         self.expr.eq(&requirement.expr)
             && if nullable {
                 requirement

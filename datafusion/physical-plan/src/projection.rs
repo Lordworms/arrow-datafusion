@@ -94,11 +94,13 @@ impl ProjectionExec {
 
         // construct a map from the input expressions to the output expression of the Projection
         let projection_mapping = ProjectionMapping::try_new(&expr, &input_schema)?;
-
+        println!("{:?}", projection_mapping);
         let input_eqs = input.equivalence_properties();
+        println!("{:?}", input_eqs);
         let project_eqs = input_eqs.project(&projection_mapping, schema.clone());
+        println!("{:?}", project_eqs);
         let output_ordering = project_eqs.oeq_class().output_ordering();
-
+        println!("{:?}", output_ordering);
         Ok(Self {
             expr,
             schema,

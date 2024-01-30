@@ -294,6 +294,7 @@ impl EquivalenceGroup {
         mut sort_requirement: PhysicalSortRequirement,
     ) -> PhysicalSortRequirement {
         sort_requirement.expr = self.normalize_expr(sort_requirement.expr);
+        println!("{:?}", sort_requirement);
         sort_requirement
     }
 
@@ -328,6 +329,7 @@ impl EquivalenceGroup {
         &self,
         sort_reqs: LexRequirementRef,
     ) -> LexRequirement {
+        println!("{:?}", sort_reqs);
         collapse_lex_req(
             sort_reqs
                 .iter()
@@ -345,6 +347,7 @@ impl EquivalenceGroup {
     ) -> Option<Arc<dyn PhysicalExpr>> {
         // First, we try to project expressions with an exact match. If we are
         // unable to do this, we consult equivalence classes.
+        println!("{:?}", expr);
         if let Some(target) = mapping.target_expr(expr) {
             // If we match the source, we can project directly:
             return Some(target);
@@ -396,6 +399,8 @@ impl EquivalenceGroup {
             if let Some((_, values)) =
                 new_classes.iter_mut().find(|(key, _)| key.eq(source))
             {
+                println!("{:?}", values);
+                println!("{:?}", target);
                 if !physical_exprs_contains(values, target) {
                     values.push(target.clone());
                 }

@@ -61,6 +61,7 @@ use crate::physical_plan::{
 use datafusion_common::tree_node::{Transformed, TreeNode};
 use datafusion_common::{plan_err, DataFusionError};
 use datafusion_physical_expr::{PhysicalSortExpr, PhysicalSortRequirement};
+use datafusion_physical_plan::displayable;
 use datafusion_physical_plan::repartition::RepartitionExec;
 
 use itertools::izip;
@@ -105,6 +106,10 @@ impl PlanWithCorrespondingSort {
     ) -> Result<Self> {
         for node in children_nodes.iter_mut() {
             let plan = &node.plan;
+            println!(
+                "*********child_plan {}\n",
+                displayable(plan.clone().as_ref()).indent(false)
+            );
             // Leaves of `sort_onwards` are `SortExec` operators, which impose
             // an ordering. This tree collects all the intermediate executors
             // that maintain this ordering. If we just saw a order imposing
@@ -118,7 +123,9 @@ impl PlanWithCorrespondingSort {
             } else {
                 let is_spm = is_sort_preserving_merge(plan);
                 let required_orderings = plan.required_input_ordering();
+                println!("{:?}", required_orderings);
                 let flags = plan.maintains_input_order();
+                println!("{:?}", flags);
                 // Add parent node to the tree if there is at least one
                 // child with a sort connection:
                 izip!(flags, required_orderings).any(|(maintains, required_ordering)| {
@@ -135,6 +142,10 @@ impl PlanWithCorrespondingSort {
             .iter()
             .map(|item| item.plan.clone())
             .collect::<Vec<_>>();
+        println!(
+            "*********cur plan is {}\n",
+            displayable(parent_plan.clone().as_ref()).indent(false)
+        );
         let plan = with_new_children_if_necessary(parent_plan, children_plans)?.into();
 
         Ok(Self {
@@ -261,10 +272,19 @@ impl PhysicalOptimizerRule for EnforceSorting {
         plan: Arc<dyn ExecutionPlan>,
         config: &ConfigOptions,
     ) -> Result<Arc<dyn ExecutionPlan>> {
+        use datafusion_physical_plan::displayable;
+        println!(
+            "*********cur plan is {}\n",
+            displayable(plan.clone().as_ref()).indent(false)
+        );
         let plan_requirements = PlanWithCorrespondingSort::new(plan);
         // Execute a bottom-up traversal to enforce sorting requirements,
         // remove unnecessary sorts, and optimize sort-sensitive operators:
         let adjusted = plan_requirements.transform_up(&ensure_sorting)?;
+        println!(
+            "*********cur plan is {}\n",
+            displayable(adjusted.plan.clone().as_ref()).indent(false)
+        );
         let new_plan = if config.optimizer.repartition_sorts {
             let plan_with_coalesce_partitions =
                 PlanWithCorrespondingCoalescePartitions::new(adjusted.plan);
@@ -274,7 +294,10 @@ impl PhysicalOptimizerRule for EnforceSorting {
         } else {
             adjusted.plan
         };
-
+        println!(
+            "*********cur plan is {}\n",
+            displayable(new_plan.clone().as_ref()).indent(false)
+        );
         let plan_with_pipeline_fixer = OrderPreservationContext::new(new_plan);
         let updated_plan =
             plan_with_pipeline_fixer.transform_up(&|plan_with_pipeline_fixer| {
@@ -291,6 +314,10 @@ impl PhysicalOptimizerRule for EnforceSorting {
         let mut sort_pushdown = SortPushDown::new(updated_plan.plan);
         sort_pushdown.assign_initial_requirements();
         let adjusted = sort_pushdown.transform_down(&pushdown_sorts)?;
+        println!(
+            "********cur plan is {}\n",
+            displayable(adjusted.plan.clone().as_ref()).indent(false)
+        );
         Ok(adjusted.plan)
     }
 
@@ -325,7 +352,11 @@ fn parallelize_sorts(
         coalesce_connection,
         mut children_nodes,
     } = requirements.update_children()?;
-
+    use datafusion_physical_plan::displayable;
+    println!(
+        "in parallelize sort cur plan is {}\n",
+        displayable(plan.clone().as_ref()).indent(false)
+    );
     if plan.children().is_empty() || !children_nodes[0].coalesce_connection {
         // We only take an action when the plan is either a SortExec, a
         // SortPreservingMergeExec or a CoalescePartitionsExec, and they
@@ -345,12 +376,27 @@ fn parallelize_sorts(
         // the CoalescePartitionsExec + Sort cascade with a SortExec +
         // SortPreservingMergeExec cascade to parallelize sorting.
         let (sort_exprs, fetch) = get_sort_exprs(&plan)?;
+        println!("{:?}", sort_exprs);
         let sort_reqs = PhysicalSortRequirement::from_sort_exprs(sort_exprs);
         let sort_exprs = sort_exprs.to_vec();
+        println!("%%%%%%%% sort expression {:?}", sort_exprs);
+        println!("%%%%%%%% child[0] is {:?}", children_nodes[0].plan.clone());
         update_child_to_remove_coalesce(&mut plan, &mut children_nodes[0])?;
+        println!(
+            "$$$$$$$$$now plan is {}",
+            displayable(plan.clone().as_ref()).indent(false)
+        );
         add_sort_above(&mut plan, &sort_reqs, fetch);
+        println!(
+            "$$$$$$$$$now plan is {}",
+            displayable(plan.clone().as_ref()).indent(false)
+        );
+        println!("%%%%%%%% sort expression {:?}", sort_exprs);
         let spm = SortPreservingMergeExec::new(sort_exprs, plan).with_fetch(fetch);
-
+        println!(
+            "{}",
+            displayable(spm.input().clone().as_ref()).indent(false)
+        );
         return Ok(Transformed::Yes(
             PlanWithCorrespondingCoalescePartitions::new(Arc::new(spm)),
         ));
@@ -380,7 +426,7 @@ fn ensure_sorting(
         requirements.plan,
         requirements.children_nodes,
     )?;
-
+    println!("{:?}", requirements.plan);
     // Perform naive analysis at the beginning -- remove already-satisfied sorts:
     if requirements.plan.children().is_empty() {
         return Ok(Transformed::No(requirements));
@@ -427,6 +473,10 @@ fn ensure_sorting(
             (None, Some(_)) => {
                 // We have a `SortExec` whose effect may be neutralized by
                 // another order-imposing operator. Remove this sort.
+                println!(
+                    "#########before removing plan is \n {}",
+                    displayable(plan.clone().as_ref()).indent(false)
+                );
                 if !plan.maintains_input_order()[idx] || is_union(&plan) {
                     update_child_to_remove_unnecessary_sort(idx, child_node, &plan)?;
                 }
@@ -599,6 +649,10 @@ fn update_child_to_remove_coalesce(
     child: &mut Arc<dyn ExecutionPlan>,
     coalesce_onwards: &mut PlanWithCorrespondingCoalescePartitions,
 ) -> Result<()> {
+    println!(
+        "&&&&&&&&& update child to remove {}",
+        displayable(child.clone().as_ref()).indent(false)
+    );
     if coalesce_onwards.coalesce_connection {
         *child = remove_corresponding_coalesce_in_sub_plan(coalesce_onwards, child)?;
     }
@@ -613,6 +667,10 @@ fn remove_corresponding_coalesce_in_sub_plan(
     if is_coalesce_partitions(&coalesce_onwards.plan) {
         // We can safely use the 0th index since we have a `CoalescePartitionsExec`.
         let mut new_plan = coalesce_onwards.plan.children()[0].clone();
+        println!(
+            "$$$$$$$$$ after remove corresponding coalesce {}",
+            displayable(new_plan.clone().as_ref()).indent(false)
+        );
         while new_plan.output_partitioning() == parent.output_partitioning()
             && is_repartition(&new_plan)
             && is_repartition(parent)
@@ -643,6 +701,8 @@ fn update_child_to_remove_unnecessary_sort(
             parent.required_input_distribution()[child_idx],
             Distribution::SinglePartition
         );
+        println!("{:?}", sort_onwards);
+        println!("{:?}", requires_single_partition);
         remove_corresponding_sort_from_sub_plan(sort_onwards, requires_single_partition)?;
     }
     sort_onwards.sort_connection = false;

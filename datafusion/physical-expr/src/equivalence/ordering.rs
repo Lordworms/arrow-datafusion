@@ -181,8 +181,12 @@ impl OrderingEquivalenceClass {
     /// Gets sort options associated with this expression if it is a leading
     /// ordering expression. Otherwise, returns `None`.
     pub fn get_options(&self, expr: &Arc<dyn PhysicalExpr>) -> Option<SortOptions> {
+        println!("{:?}", expr);
+        println!("{:?}", self.orderings);
         for ordering in self.iter() {
+            println!("{:?}", ordering);
             let leading_ordering = &ordering[0];
+            println!("{:?}", leading_ordering);
             if leading_ordering.expr.eq(expr) {
                 return Some(leading_ordering.options);
             }

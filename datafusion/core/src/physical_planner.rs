@@ -1880,6 +1880,7 @@ impl DefaultPhysicalPlanner {
         let mut new_plan = plan;
         for optimizer in optimizers {
             let before_schema = new_plan.schema();
+            let name = optimizer.name();
             new_plan = optimizer
                 .optimize(new_plan, session_state.config_options())
                 .map_err(|e| {
@@ -1897,7 +1898,7 @@ impl DefaultPhysicalPlanner {
                     Box::new(e),
                 ));
             }
-            trace!(
+            println!(
                 "Optimized physical plan by {}:\n{}\n",
                 optimizer.name(),
                 displayable(new_plan.as_ref()).indent(false)

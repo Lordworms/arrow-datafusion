@@ -307,6 +307,7 @@ impl<'a> DFParser<'a> {
             }
 
             let statement = parser.parse_statement()?;
+            //println!("got a new statement {statement}");
             stmts.push_back(statement);
             expecting_statement_delimiter = true;
         }

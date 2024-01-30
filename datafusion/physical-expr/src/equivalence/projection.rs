@@ -52,6 +52,7 @@ impl ProjectionMapping {
         input_schema: &SchemaRef,
     ) -> Result<Self> {
         // Construct a map from the input expressions to the output expression of the projection:
+        println!("{:?}", expr);
         expr.iter()
             .enumerate()
             .map(|(expr_idx, (expression, name))| {
@@ -65,9 +66,15 @@ impl ProjectionMapping {
                             // that the expression name matches with the name in `input_schema`.
                             // Conceptually, `source_expr` and `expression` should be the same.
                             let idx = col.index();
+                            println!("idx is {}", idx);
                             let matching_input_field = input_schema.field(idx);
+                            println!("input field is  {:?}", matching_input_field);
                             let matching_input_column =
                                 Column::new(matching_input_field.name(), idx);
+                            println!(
+                                "matching input column is {:?}",
+                                matching_input_column
+                            );
                             Ok(Transformed::Yes(Arc::new(matching_input_column)))
                         }
                         None => Ok(Transformed::No(e)),
@@ -99,6 +106,8 @@ impl ProjectionMapping {
         &self,
         expr: &Arc<dyn PhysicalExpr>,
     ) -> Option<Arc<dyn PhysicalExpr>> {
+        println!("self.map is {:?}", self.map);
+        println!("the expr is {:?}", expr);
         self.map
             .iter()
             .find(|(source, _)| source.eq(expr))
