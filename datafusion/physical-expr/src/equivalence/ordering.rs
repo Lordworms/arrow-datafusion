@@ -55,6 +55,7 @@ impl OrderingEquivalenceClass {
     pub fn new(orderings: Vec<LexOrdering>) -> Self {
         let mut result = Self { orderings };
         result.remove_redundant_entries();
+        println!("result is {:?}", result);
         result
     }
 

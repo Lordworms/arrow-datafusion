@@ -281,13 +281,13 @@ impl EquivalenceProperties {
     /// existing orderings.
     pub fn ordering_satisfy_requirement(&self, reqs: LexRequirementRef) -> bool {
         let mut eq_properties = self.clone();
-        println!("{:?}", eq_properties);
+        println!("eq properties is {:?}", eq_properties);
         // First, standardize the given requirement:
         let normalized_reqs = eq_properties.normalize_sort_requirements(reqs);
-        println!("{:?}", normalized_reqs);
         for normalized_req in normalized_reqs {
             // Check whether given ordering is satisfied
-            println!("{:?}", self.oeq_class);
+            println!("-------oeq_class is {:?}", self.oeq_class);
+            println!("-------normalized requirement is {:?}", normalized_req);
             println!("-------------------------------------------");
             if !eq_properties.ordering_satisfy_single(&normalized_req) {
                 return false;
@@ -495,9 +495,10 @@ impl EquivalenceProperties {
     /// ```
     fn construct_dependency_map(&self, mapping: &ProjectionMapping) -> DependencyMap {
         let mut dependency_map = HashMap::new();
-        println!("{:?}", self.normalized_oeq_class());
+        println!("----oeq class is {:?}", self.normalized_oeq_class());
         println!("-----eq group is {:?}", self.eq_group);
         for ordering in self.normalized_oeq_class().iter() {
+            println!("ordering is {:?}", ordering);
             for (idx, sort_expr) in ordering.iter().enumerate() {
                 println!("------idx is {:?} \n and sort_expr is {:?}", idx, sort_expr);
                 let target_sort_expr =
@@ -831,9 +832,9 @@ fn update_ordering(
 ) -> Transformed<ExprOrdering> {
     // We have a Column, which is one of the two possible leaf node types:
     let normalized_expr = eq_properties.eq_group.normalize_expr(node.expr.clone());
-    println!("normalized_expr: {}", normalized_expr);
-    println!("node is {:?}", node);
-    println!("eq_properties is {:?}", eq_properties);
+    println!("--------normalized_expr: {}", normalized_expr);
+    println!("--------node is {:?}", node);
+    println!("--------eq_properties is {:?}", eq_properties);
     if eq_properties.is_expr_constant(&normalized_expr) {
         node.state = SortProperties::Singleton;
     } else if let Some(options) = eq_properties
