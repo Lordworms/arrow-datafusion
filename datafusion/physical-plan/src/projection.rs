@@ -94,13 +94,13 @@ impl ProjectionExec {
 
         // construct a map from the input expressions to the output expression of the Projection
         let projection_mapping = ProjectionMapping::try_new(&expr, &input_schema)?;
-        println!("{:?}", projection_mapping);
+        println!("projection_mapping is {:?}", projection_mapping);
         let input_eqs = input.equivalence_properties();
-        println!("{:?}", input_eqs);
+        println!("input_eqs is {:?}", input_eqs);
         let project_eqs = input_eqs.project(&projection_mapping, schema.clone());
         println!("{:?}", project_eqs);
         let output_ordering = project_eqs.oeq_class().output_ordering();
-        println!("{:?}", output_ordering);
+        println!("output_ordering is {:?}", output_ordering);
         Ok(Self {
             expr,
             schema,
@@ -203,9 +203,12 @@ impl ExecutionPlan for ProjectionExec {
     }
 
     fn equivalence_properties(&self) -> EquivalenceProperties {
-        self.input
+        let res = self
+            .input
             .equivalence_properties()
-            .project(&self.projection_mapping, self.schema())
+            .project(&self.projection_mapping, self.schema());
+        println!("************in ProjectionExec the Eqv is {:?}", res);
+        res
     }
 
     fn with_new_children(

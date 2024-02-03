@@ -105,6 +105,10 @@ impl ExecutionPlan for CoalescePartitionsExec {
         let mut output_eq = self.input.equivalence_properties();
         // Coalesce partitions loses existing orderings.
         output_eq.clear_orderings();
+        println!(
+            "############## in CoalescePartitionsExec the Eqv is {:?}",
+            output_eq
+        );
         output_eq
     }
 

@@ -57,6 +57,8 @@ impl ProjectionMapping {
             .enumerate()
             .map(|(expr_idx, (expression, name))| {
                 let target_expr = Arc::new(Column::new(name, expr_idx)) as _;
+                println!("target expr is {:?}", target_expr);
+                println!("expression is {:?}", expression);
                 expression
                     .clone()
                     .transform_down(&|e| match e.as_any().downcast_ref::<Column>() {

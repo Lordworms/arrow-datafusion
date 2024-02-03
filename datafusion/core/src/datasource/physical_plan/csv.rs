@@ -152,11 +152,16 @@ impl ExecutionPlan for CsvExec {
             .map(|ordering| ordering.as_slice())
     }
 
-    fn equivalence_properties(&self) -> EquivalenceProperties {
-        EquivalenceProperties::new_with_orderings(
+    c
+        let res = EquivalenceProperties::new_with_orderings(
             self.schema(),
             &self.projected_output_ordering,
-        )
+        );
+        println!(
+            "######################### In CSVExec we have the EQU  is {:?}",
+            res
+        );
+        res
     }
 
     fn children(&self) -> Vec<Arc<dyn ExecutionPlan>> {

@@ -286,8 +286,14 @@ impl EquivalenceProperties {
         let normalized_reqs = eq_properties.normalize_sort_requirements(reqs);
         for normalized_req in normalized_reqs {
             // Check whether given ordering is satisfied
-            println!("-------oeq_class is {:?}", self.oeq_class);
-            println!("-------normalized requirement is {:?}", normalized_req);
+            println!(
+                "--------------------------------oeq_class is {:?}",
+                self.oeq_class
+            );
+            println!(
+                "--------------------------------normalized requirement is {:?}",
+                normalized_req
+            );
             println!("-------------------------------------------");
             if !eq_properties.ordering_satisfy_single(&normalized_req) {
                 return false;
@@ -509,7 +515,7 @@ impl EquivalenceProperties {
                         }
                     });
                 println!("-------target sort expr is  {:?}", target_sort_expr);
-                let is_projected = target_sort_expr.is_some();
+                let mut is_projected = target_sort_expr.is_some();
                 if is_projected
                     || mapping
                         .iter()
@@ -529,6 +535,7 @@ impl EquivalenceProperties {
                             dependencies: HashSet::new(),
                         })
                         .insert_dependency(dependency);
+                    println!("{:?}", dependency_map);
                 }
                 if !is_projected {
                     // If we can not project, stop constructing the dependency
@@ -586,14 +593,15 @@ impl EquivalenceProperties {
     fn projected_orderings(&self, mapping: &ProjectionMapping) -> Vec<LexOrdering> {
         println!("{:?}", mapping);
         let mapping = self.normalized_mapping(mapping);
-        println!("{:?}", mapping);
+        println!("mapping is {:?}", mapping);
         // Get dependency map for existing orderings:
         let dependency_map = self.construct_dependency_map(&mapping);
-        println!("{:?}", dependency_map);
+        println!("-----dependency map is {:?}", dependency_map);
         let orderings = mapping.iter().flat_map(|(source, target)| {
             referred_dependencies(&dependency_map, source)
                 .into_iter()
                 .filter_map(|relevant_deps| {
+                    println!("relevant deps is {:?}", relevant_deps);
                     if let SortProperties::Ordered(options) =
                         get_expr_ordering(source, &relevant_deps)
                     {
@@ -604,6 +612,8 @@ impl EquivalenceProperties {
                     }
                 })
                 .flat_map(|(options, relevant_deps)| {
+                    println!("----ordering is {:?}", options);
+                    println!("-----relevant_deps is {:?}", relevant_deps);
                     let sort_expr = PhysicalSortExpr {
                         expr: target.clone(),
                         options,
@@ -638,6 +648,7 @@ impl EquivalenceProperties {
             }
             prefixes
         });
+        // we need to add the remaining part, which is in schema and dep_map but not included inorderings
 
         // Simplify each ordering by removing redundant sections:
         orderings
@@ -691,13 +702,27 @@ impl EquivalenceProperties {
         projection_mapping: &ProjectionMapping,
         output_schema: SchemaRef,
     ) -> Self {
-        println!("{:?}", projection_mapping);
-        println!("{:?}", output_schema);
+        println!("---------project mapping is {:?}", projection_mapping);
+        println!("---------output schema is {:?}", output_schema);
+        let prev_eq_orderings = self.oeq_class.orderings.clone();
+        println!("-----prev_eq_orderings {:?}", prev_eq_orderings);
         let projected_constants = self.projected_constants(projection_mapping);
         println!("projected constants is {:?}", projected_constants);
         let projected_eq_group = self.eq_group.project(projection_mapping);
         println!("projected_eq_group {:?}", projected_eq_group);
-        let projected_orderings = self.projected_orderings(projection_mapping);
+        let mut projected_orderings = self.projected_orderings(projection_mapping);
+        println!("projected_ordering is \n {:?}", projected_orderings);
+        // there maybe some orderings ignored by projected_orderings, we need to add them
+        // let mut seen = HashSet::new();
+        // projected_orderings.iter().for_each(|ord| {
+        //     seen.insert(ord.clone());
+        // });
+        // prev_eq_orderings.into_iter().for_each(|ord| {
+        //     println!("$$$$$$$$$$$$$ {:?}", ord);
+        //     if seen.insert(ord.clone()) {
+        //         projected_orderings.push(ord);
+        //     }
+        // });
         println!("projected_ordering is \n {:?}", projected_orderings);
         Self {
             eq_group: projected_eq_group,
@@ -1105,7 +1130,10 @@ fn construct_orderings(
     dependency_map: &DependencyMap,
 ) -> Vec<LexOrdering> {
     // We are sure that `referred_sort_expr` is inside `dependency_map`.
+    println!("----------  {:?}", dependency_map);
+    println!("----------  {:?}", referred_sort_expr);
     let node = &dependency_map[referred_sort_expr];
+    println!("----------  {:?}", node);
     // Since we work on intermediate nodes, we are sure `val.target_sort_expr`
     // exists.
     let target_sort_expr = node.target_sort_expr.clone().unwrap();

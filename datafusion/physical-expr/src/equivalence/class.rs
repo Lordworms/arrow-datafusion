@@ -423,6 +423,7 @@ impl EquivalenceGroup {
         &self,
         expr: &Arc<dyn PhysicalExpr>,
     ) -> Option<&EquivalenceClass> {
+        println!("{:?}", self.classes);
         self.iter().find(|cls| cls.contains(expr))
     }
 

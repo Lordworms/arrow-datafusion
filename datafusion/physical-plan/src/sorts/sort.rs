@@ -836,9 +836,12 @@ impl ExecutionPlan for SortExec {
 
     fn equivalence_properties(&self) -> EquivalenceProperties {
         // Reset the ordering equivalence class with the new ordering:
-        self.input
+        let res = self
+            .input
             .equivalence_properties()
-            .with_reorder(self.expr.to_vec())
+            .with_reorder(self.expr.to_vec());
+        println!("##############in SortExec the EQV is {:?}", res);
+        res
     }
 
     fn with_new_children(

@@ -386,6 +386,7 @@ fn parallelize_sorts(
             "$$$$$$$$$now plan is {}",
             displayable(plan.clone().as_ref()).indent(false)
         );
+        println!("sort requirement is {:?}", sort_reqs);
         add_sort_above(&mut plan, &sort_reqs, fetch);
         println!(
             "$$$$$$$$$now plan is {}",

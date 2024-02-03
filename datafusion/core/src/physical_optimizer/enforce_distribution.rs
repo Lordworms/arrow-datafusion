@@ -1244,6 +1244,12 @@ fn ensure_distribution(
                 // Either:
                 // - Ordering requirement cannot be satisfied by preserving ordering through repartitions, or
                 // - using order preserving variant is not desirable.
+                use datafusion_physical_plan::displayable;
+                println!(
+                    "child.plan is {}\n",
+                    displayable(child.plan.clone().as_ref()).indent(false)
+                );
+                println!("{:?}", required_input_ordering);
                 let ordering_satisfied = child
                     .plan
                     .equivalence_properties()
