@@ -152,7 +152,7 @@ impl ExecutionPlan for CsvExec {
             .map(|ordering| ordering.as_slice())
     }
 
-    c
+    fn equivalence_properties(&self) -> EquivalenceProperties {
         let res = EquivalenceProperties::new_with_orderings(
             self.schema(),
             &self.projected_output_ordering,

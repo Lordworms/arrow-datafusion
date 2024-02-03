@@ -52,7 +52,8 @@ impl ProjectionMapping {
         input_schema: &SchemaRef,
     ) -> Result<Self> {
         // Construct a map from the input expressions to the output expression of the projection:
-        println!("{:?}", expr);
+        println!("the expr is {:?}", expr);
+        println!("the input schema is {:?}", input_schema);
         expr.iter()
             .enumerate()
             .map(|(expr_idx, (expression, name))| {

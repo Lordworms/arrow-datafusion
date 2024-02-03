@@ -358,6 +358,7 @@ impl EquivalenceGroup {
                 // If we match an equivalent expression to `source`, then we can
                 // project. For example, if we have the mapping `(a as a1, a + c)`
                 // and the equivalence class `(a, b)`, expression `b` projects to `a1`.
+                println!("source is {:?} and target is {:?}", source, target);
                 if self
                     .get_equivalence_class(source)
                     .map_or(false, |group| group.contains(expr))
