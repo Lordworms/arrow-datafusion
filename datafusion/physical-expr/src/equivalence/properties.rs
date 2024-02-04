@@ -469,7 +469,15 @@ impl EquivalenceProperties {
     ) -> Option<Arc<dyn PhysicalExpr>> {
         self.eq_group.project_expr(projection_mapping, expr)
     }
-
+    /// this function takes the input of an expression and a project map, then return the equivilant
+    ///
+    pub fn get_mononic_project(
+        &self,
+        expr: &Arc<dyn PhysicalExpr>,
+        mapping: &ProjectionMapping,
+    ) -> Option<Arc<dyn PhysicalExpr>> {
+        unimplemented!()
+    }
     /// Constructs a dependency map based on existing orderings referred to in
     /// the projection.
     ///

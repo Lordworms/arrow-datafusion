@@ -348,6 +348,7 @@ impl EquivalenceGroup {
         // First, we try to project expressions with an exact match. If we are
         // unable to do this, we consult equivalence classes.
         println!("{:?}", expr);
+        println!("self.equvalance class {:?}", self.classes);
         if let Some(target) = mapping.target_expr(expr) {
             // If we match the source, we can project directly:
             return Some(target);

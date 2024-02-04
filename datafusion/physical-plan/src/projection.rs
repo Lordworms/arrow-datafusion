@@ -70,7 +70,7 @@ impl ProjectionExec {
         input: Arc<dyn ExecutionPlan>,
     ) -> Result<Self> {
         let input_schema = input.schema();
-
+        println!("the input schema is {:?}", input_schema);
         let fields: Result<Vec<Field>> = expr
             .iter()
             .map(|(e, name)| {
@@ -79,6 +79,7 @@ impl ProjectionExec {
                     e.data_type(&input_schema)?,
                     e.nullable(&input_schema)?,
                 );
+                println!("{:?}", field);
                 field.set_metadata(
                     get_field_metadata(e, &input_schema).unwrap_or_default(),
                 );
@@ -86,12 +87,12 @@ impl ProjectionExec {
                 Ok(field)
             })
             .collect();
-
+        println!("expression is {:?}", expr);
         let schema = Arc::new(Schema::new_with_metadata(
             fields?,
             input_schema.metadata().clone(),
         ));
-
+        println!("new schema is {:?}", schema);
         // construct a map from the input expressions to the output expression of the Projection
         let projection_mapping = ProjectionMapping::try_new(&expr, &input_schema)?;
         println!("projection_mapping is {:?}", projection_mapping);
