@@ -226,8 +226,6 @@ pub enum BuiltinScalarFunction {
     OctetLength,
     /// random
     Random,
-    /// regexp_like
-    RegexpLike,
     /// regexp_match
     /// regexp_replace
     RegexpReplace,
@@ -441,7 +439,6 @@ impl BuiltinScalarFunction {
             BuiltinScalarFunction::MD5 => Volatility::Immutable,
             BuiltinScalarFunction::OctetLength => Volatility::Immutable,
             BuiltinScalarFunction::Radians => Volatility::Immutable,
-            BuiltinScalarFunction::RegexpLike => Volatility::Immutable,
             BuiltinScalarFunction::RegexpReplace => Volatility::Immutable,
             BuiltinScalarFunction::Repeat => Volatility::Immutable,
             BuiltinScalarFunction::Replace => Volatility::Immutable,
@@ -794,15 +791,6 @@ impl BuiltinScalarFunction {
             BuiltinScalarFunction::Upper => {
                 utf8_to_str_type(&input_expr_types[0], "upper")
             }
-            BuiltinScalarFunction::RegexpLike => Ok(match &input_expr_types[0] {
-                LargeUtf8 | Utf8 => Boolean,
-                Null => Null,
-                other => {
-                    return plan_err!(
-                        "The regexp_like function can only accept strings. Got {other}"
-                    );
-                }
-            }),
 
             BuiltinScalarFunction::Factorial
             | BuiltinScalarFunction::Gcd
@@ -1224,15 +1212,6 @@ impl BuiltinScalarFunction {
             BuiltinScalarFunction::Replace | BuiltinScalarFunction::Translate => {
                 Signature::one_of(vec![Exact(vec![Utf8, Utf8, Utf8])], self.volatility())
             }
-            BuiltinScalarFunction::RegexpLike => Signature::one_of(
-                vec![
-                    Exact(vec![Utf8, Utf8]),
-                    Exact(vec![LargeUtf8, Utf8]),
-                    Exact(vec![Utf8, Utf8, Utf8]),
-                    Exact(vec![LargeUtf8, Utf8, Utf8]),
-                ],
-                self.volatility(),
-            ),
             BuiltinScalarFunction::RegexpReplace => Signature::one_of(
                 vec![
                     Exact(vec![Utf8, Utf8, Utf8]),
@@ -1472,7 +1451,6 @@ impl BuiltinScalarFunction {
             BuiltinScalarFunction::FindInSet => &["find_in_set"],
 
             // regex functions
-            BuiltinScalarFunction::RegexpLike => &["regexp_like"],
             BuiltinScalarFunction::RegexpReplace => &["regexp_replace"],
 
             // time/date functions

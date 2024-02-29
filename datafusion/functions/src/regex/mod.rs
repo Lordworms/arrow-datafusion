@@ -17,13 +17,17 @@
 
 //! "regx" DataFusion functions
 
+mod regexplike;
 mod regexpmatch;
 // create UDFs
 make_udf_function!(regexpmatch::RegexpMatchFunc, REGEXP_MATCH, regexp_match);
-
+make_udf_function!(regexplike::RegexpLikeFunc, REGEXP_LIKE, regexp_like);
 export_functions!((
     regexp_match,
-    input_arg1
-    input_arg2,
+    input_arg1 input_arg2,
     "returns a list of regular expression matches in a string. "
+),(
+    regexp_like,
+    input_arg1 input_arg2,
+    "Returns true if a has at least one match in a string,false otherwise."
 ));
