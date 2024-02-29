@@ -17,8 +17,9 @@
 
 //! "regx" DataFusion functions
 
-mod regexplike;
-mod regexpmatch;
+pub mod regexplike;
+pub mod regexpmatch;
+
 // create UDFs
 make_udf_function!(regexpmatch::RegexpMatchFunc, REGEXP_MATCH, regexp_match);
 make_udf_function!(regexplike::RegexpLikeFunc, REGEXP_LIKE, regexp_like);
