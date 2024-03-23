@@ -884,4 +884,29 @@ mod tests {
 
         Ok(())
     }
+    #[tokio::test]
+    async fn disable_parall_read_compressed() -> Result<()> {
+        let ctx = SessionContext::new();
+        let df = ctx
+            .read_json(
+                "/Users/xiangyanxin/personal/DATAFUSION/arrow-datafusion/example.json.gz",
+                NdJsonReadOptions::default(), // .file_compression_type(FileCompressionType::GZIP)
+                                              // .file_extension("gz"),
+            )
+            .await
+            .unwrap();
+        // let df = ctx
+        //     .read_json(
+        //         "/Users/xiangyanxin/personal/DATAFUSION/arrow-datafusion/example.json.gz",
+        //         NdJsonReadOptions::default()
+        //             .file_compression_type(FileCompressionType::GZIP)
+        //             .file_extension("gz"),
+        //     )
+        //     .await
+        //     .unwrap();
+        println!("*************** \n df is {:?} \n *************", df);
+        let a = df.show().await;
+        println!("*************** \n res is {:?} \n *************", a);
+        Ok(())
+    }
 }
