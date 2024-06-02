@@ -294,6 +294,9 @@ impl TryFrom<&ScalarValue> for protobuf::ScalarValue {
             ScalarValue::Boolean(val) => {
                 create_proto_scalar(val.as_ref(), &data_type, |s| Value::BoolValue(*s))
             }
+            ScalarValue::Float16(_) => {
+                unimplemented!()
+            }
             ScalarValue::Float32(val) => {
                 create_proto_scalar(val.as_ref(), &data_type, |s| Value::Float32Value(*s))
             }
