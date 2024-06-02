@@ -812,6 +812,7 @@ fn create_data_batch(scenario: Scenario) -> Vec<RecordBatch> {
         }
         Scenario::NumericLimits => {
             vec![make_numeric_limit_batch()]
+        }
         Scenario::Float16 => {
             vec![
                 make_f16_batch(
