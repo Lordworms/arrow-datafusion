@@ -29,7 +29,7 @@ use arrow::{
     },
     record_batch::RecordBatch,
 };
-use arrow_array::Float32Array;
+use arrow_array::{Float32Array, Int64Array};
 use arrow_schema::ArrowError;
 use datafusion_functions_aggregate::count::count_udaf;
 use object_store::local::LocalFileSystem;
@@ -2119,6 +2119,32 @@ async fn write_partitioned_parquet_results() -> Result<()> {
 
     assert_batches_sorted_eq!(expected, &results);
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn issue_10878_bug() -> Result<()> {
+    let schema = Arc::new(Schema::new(vec![Field::new("a", DataType::Int64, true)]));
+
+    // Create a record batch
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![Arc::new(Int64Array::from(vec![Some(1), Some(3), Some(5)])) as ArrayRef],
+    )?;
+
+    // Create a MemTable from the record batch
+    let table = MemTable::try_new(schema, vec![vec![batch]])?;
+
+    let mut ctx = SessionContext::new();
+
+    // Register the MemTable as "test"
+    ctx.register_table("test", Arc::new(table))?;
+
+    let df = ctx
+        .sql("SELECT MIN(a) FILTER (WHERE a > 1) AS x FROM test")
+        .await?;
+
+    let results = df.collect().await?;
     Ok(())
 }
 
