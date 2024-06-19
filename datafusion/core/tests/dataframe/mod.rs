@@ -2220,3 +2220,40 @@ async fn write_parquet_results() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test() -> Result<()> {
+    // Define the schema for the table
+    let schema = Arc::new(Schema::new(vec![Field::new("a", DataType::Int64, true)]));
+
+    // Create a RecordBatch with the data
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![Arc::new(Int64Array::from(vec![Some(1), Some(3), Some(5)])) as ArrayRef],
+    )?;
+
+    // Create a MemTable with the RecordBatch
+    let table = MemTable::try_new(schema, vec![vec![batch]])?;
+
+    // Create a DataFusion context
+    let ctx = SessionContext::new();
+
+    // Register the MemTable as a table named "test"
+    ctx.register_table("test", Arc::new(table))?;
+
+    // Define the SQL query
+    let sql = "SELECT MIN(a) FILTER (WHERE a > 1) AS x FROM test";
+    //let sql = "SELECT MIN(a) FILTER (WHERE a > 1) FROM test";
+    // Execute the query
+    let df = ctx.sql(sql).await?;
+
+    // Collect the results
+    let results = df.collect().await?;
+
+    // Display the results
+    for batch in results {
+        println!("************** {:?} ****************", batch);
+    }
+
+    Ok(())
+}
