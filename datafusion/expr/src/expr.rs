@@ -372,10 +372,15 @@ impl Alias {
         relation: Option<impl Into<TableReference>>,
         name: impl Into<String>,
     ) -> Self {
+        let name = name.into();
+        println!("alias's name is {:?}", name);
+        if name == "MIN(test.a) FILTER (WHERE test.a > Int64(1))" {
+            //println!("1");
+        }
         Self {
             expr: Box::new(expr),
             relation: relation.map(|r| r.into()),
-            name: name.into(),
+            name,
         }
     }
 }

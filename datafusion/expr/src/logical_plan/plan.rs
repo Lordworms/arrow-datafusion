@@ -49,6 +49,7 @@ use datafusion_common::{
     DFSchema, DFSchemaRef, DataFusionError, Dependency, FunctionalDependence,
     FunctionalDependencies, ParamValues, Result, TableReference, UnnestOptions,
 };
+use log::debug;
 
 // backwards compatibility
 use crate::display::PgJsonVisitor;
@@ -2024,7 +2025,9 @@ pub struct Projection {
 impl Projection {
     /// Create a new Projection
     pub fn try_new(expr: Vec<Expr>, input: Arc<LogicalPlan>) -> Result<Self> {
+        debug!("expr is {:?}", expr);
         let projection_schema = projection_schema(&input, &expr)?;
+        debug!("projection_schema is {:?}", projection_schema);
         Self::try_new_with_schema(expr, input, projection_schema)
     }
 

@@ -146,7 +146,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
 
         // All of the aggregate expressions (deduplicated).
         let aggr_exprs = find_aggregate_exprs(&aggr_expr_haystack);
-
+        println!("agg exprs is {:?}", aggr_exprs);
         // All of the group by expressions
         let group_by_exprs = if let GroupByExpr::Expressions(exprs) = select.group_by {
             exprs
@@ -286,7 +286,6 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
         };
 
         let plan = self.order_by(plan, order_by_rex)?;
-
         Ok(plan)
     }
 
@@ -426,6 +425,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
         empty_from: bool,
         planner_context: &mut PlannerContext,
     ) -> Result<Vec<Expr>> {
+        println!("the sql is {:?}", sql);
         match sql {
             SelectItem::UnnamedExpr(expr) => {
                 let expr = self.sql_to_expr(expr, plan.schema(), planner_context)?;
@@ -439,6 +439,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
             SelectItem::ExprWithAlias { expr, alias } => {
                 let select_expr =
                     self.sql_to_expr(expr, plan.schema(), planner_context)?;
+                println!("plan's schema is {:?}", plan.schema());
                 let col = normalize_col_with_schemas_and_ambiguity_check(
                     select_expr,
                     &[&[plan.schema()]],

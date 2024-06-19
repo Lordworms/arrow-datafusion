@@ -57,6 +57,7 @@ mod topk_stream;
 
 pub use datafusion_expr::AggregateFunction;
 pub use datafusion_physical_expr::expressions::create_aggregate_expr;
+use log::debug;
 
 /// Hash aggregate modes
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -302,6 +303,11 @@ impl AggregateExec {
         input: Arc<dyn ExecutionPlan>,
         input_schema: SchemaRef,
     ) -> Result<Self> {
+        debug!(
+            "input schema in try new is {:?}, \n and input is {:?} \n",
+            input.schema(),
+            input
+        );
         let schema = create_schema(
             &input.schema(),
             &group_by.expr,
@@ -309,7 +315,7 @@ impl AggregateExec {
             group_by.contains_null(),
             mode,
         )?;
-
+        debug!("created schema is {:?}", schema);
         let schema = Arc::new(schema);
         AggregateExec::try_new_with_schema(
             mode,

@@ -18,6 +18,7 @@
 //! Column
 
 use arrow_schema::{Field, FieldRef};
+use log::debug;
 
 use crate::error::_schema_err;
 use crate::utils::{parse_identifiers_normalized, quote_identifier};
@@ -48,6 +49,10 @@ impl Column {
         relation: Option<impl Into<TableReference>>,
         name: impl Into<String>,
     ) -> Self {
+        let name: String = name.into();
+        if name == "MIN(test.a) FILTER (WHERE test.a > Int64(1))" {
+            println!("1");
+        }
         Self {
             relation: relation.map(|r| r.into()),
             name: name.into(),
@@ -266,12 +271,17 @@ impl Column {
         if self.relation.is_some() {
             return Ok(self);
         }
-
+        debug!("all schemas are {:?} \n", schemas);
         for schema_level in schemas {
+            debug!("schema level is {:?} \n", schema_level);
             let qualified_fields = schema_level
                 .iter()
-                .flat_map(|s| s.qualified_fields_with_unqualified_name(&self.name))
+                .flat_map(|s| {
+                    debug!("inside schema is {:?}", s);
+                    s.qualified_fields_with_unqualified_name(&self.name)
+                })
                 .collect::<Vec<_>>();
+            debug!("qualified_fields are {:?} \n", qualified_fields);
             match qualified_fields.len() {
                 0 => continue,
                 1 => return Ok(Column::from(qualified_fields[0])),

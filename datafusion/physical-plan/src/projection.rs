@@ -45,7 +45,7 @@ use datafusion_physical_expr::equivalence::ProjectionMapping;
 use datafusion_physical_expr::expressions::{Literal, UnKnownColumn};
 
 use futures::stream::{Stream, StreamExt};
-use log::trace;
+use log::{debug, trace};
 
 /// Execution plan for a projection
 #[derive(Debug, Clone)]
@@ -69,7 +69,10 @@ impl ProjectionExec {
         input: Arc<dyn ExecutionPlan>,
     ) -> Result<Self> {
         let input_schema = input.schema();
-
+        debug!(
+            "input schema is {:?} and input is {:?} \n",
+            input_schema, input
+        );
         let fields: Result<Vec<Field>> = expr
             .iter()
             .map(|(e, name)| {

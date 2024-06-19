@@ -33,6 +33,7 @@ use datafusion_common::TableReference;
 use datafusion_common::{Column, DFSchema, Result};
 
 mod order_by;
+use log::debug;
 pub use order_by::rewrite_sort_cols_by_aggs;
 
 /// Trait for rewriting [`Expr`]s into function calls.
@@ -90,10 +91,11 @@ pub fn normalize_col_with_schemas_and_ambiguity_check(
         )?;
         return Ok(Expr::Unnest(Unnest { expr: Box::new(e) }));
     }
-
+    debug!("expr to normalize is {:?}", expr);
     expr.transform(|expr| {
         Ok({
             if let Expr::Column(c) = expr {
+                debug!("the schema is {:?}", schemas);
                 let col =
                     c.normalize_with_schemas_and_ambiguity_check(schemas, using_columns)?;
                 Transformed::yes(Expr::Column(col))

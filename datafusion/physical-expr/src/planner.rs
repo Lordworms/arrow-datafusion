@@ -27,6 +27,7 @@ use datafusion_expr::expr::{Alias, Cast, InList, ScalarFunction};
 use datafusion_expr::var_provider::is_system_variables;
 use datafusion_expr::var_provider::VarType;
 use datafusion_expr::{binary_expr, Between, BinaryExpr, Expr, Like, Operator, TryCast};
+use log::debug;
 
 use crate::scalar_function;
 use crate::{
@@ -108,7 +109,7 @@ pub fn create_physical_expr(
     execution_props: &ExecutionProps,
 ) -> Result<Arc<dyn PhysicalExpr>> {
     let input_schema: &Schema = &input_dfschema.into();
-
+    debug!("current expr is {:?}", e);
     match e {
         Expr::Alias(Alias { expr, .. }) => {
             Ok(create_physical_expr(expr, input_dfschema, execution_props)?)

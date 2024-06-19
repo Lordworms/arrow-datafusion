@@ -202,7 +202,7 @@ config_namespace! {
 
         /// Configure the SQL dialect used by DataFusion's parser; supported values include: Generic,
         /// MySQL, PostgreSQL, Hive, SQLite, Snowflake, Redshift, MsSQL, ClickHouse, BigQuery, and Ansi.
-        pub dialect: String, default = "generic".to_string()
+        pub dialect: String, default = "postgresql".to_string()
 
     }
 }

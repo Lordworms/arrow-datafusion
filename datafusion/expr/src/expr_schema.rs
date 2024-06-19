@@ -31,6 +31,7 @@ use datafusion_common::{
     internal_err, not_impl_err, plan_datafusion_err, plan_err, Column, ExprSchema,
     Result, TableReference,
 };
+use log::debug;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -429,6 +430,7 @@ impl ExprSchemable for Expr {
         &self,
         input_schema: &dyn ExprSchema,
     ) -> Result<(Option<TableReference>, Arc<Field>)> {
+        debug!("{:?}", input_schema);
         match self {
             Expr::Column(c) => {
                 let (data_type, nullable) = self.data_type_and_nullable(input_schema)?;
@@ -450,6 +452,8 @@ impl ExprSchemable for Expr {
             }
             _ => {
                 let (data_type, nullable) = self.data_type_and_nullable(input_schema)?;
+                let print_name = self.display_name();
+                debug!("print name is {:?}", print_name);
                 Ok((
                     None,
                     Field::new(self.display_name()?, data_type, nullable)

@@ -55,6 +55,7 @@ use datafusion_common::{
     plan_err, Column, DFSchema, DFSchemaRef, DataFusionError, Result, ScalarValue,
     TableReference, ToDFSchema, UnnestOptions,
 };
+use log::debug;
 
 /// Default table name for unnamed table
 pub const UNNAMED_TABLE: &str = "?table?";
@@ -688,6 +689,11 @@ impl LogicalPlanBuilder {
         plan: &LogicalPlan,
         column: impl Into<Column> + Clone,
     ) -> Result<Column> {
+        debug!(
+            "the plan is {:?} and the schema is {:?}",
+            plan,
+            plan.schema()
+        );
         let schema = plan.schema();
         let fallback_schemas = plan.fallback_normalize_schemas();
         let using_columns = plan.using_columns()?;

@@ -23,6 +23,7 @@ use crate::PhysicalExpr;
 use arrow::datatypes::SchemaRef;
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
 use datafusion_common::{internal_err, Result};
+use log::debug;
 
 /// Stores the mapping between source expressions and target expressions for a
 /// projection.
@@ -52,6 +53,7 @@ impl ProjectionMapping {
         input_schema: &SchemaRef,
     ) -> Result<Self> {
         // Construct a map from the input expressions to the output expression of the projection:
+        debug!("the expressions are {:?}", expr);
         expr.iter()
             .enumerate()
             .map(|(expr_idx, (expression, name))| {
@@ -67,6 +69,7 @@ impl ProjectionMapping {
                             let idx = col.index();
                             let matching_input_field = input_schema.field(idx);
                             if col.name() != matching_input_field.name() {
+                                debug!("the schema is {:?} \n  and the matching_input_field is {:?} and the col is {:?}", input_schema, matching_input_field, col);
                                 return internal_err!("Input field name {} does not match with the projection expression {}",
                                     matching_input_field.name(),col.name())
                                 }
