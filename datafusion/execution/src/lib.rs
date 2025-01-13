@@ -37,5 +37,8 @@ pub mod registry {
 
 pub use disk_manager::DiskManager;
 pub use registry::FunctionRegistry;
-pub use stream::{RecordBatchStream, SendableRecordBatchStream};
+pub use stream::{
+    RecordBatchStream, RowOrColumn, RowOrColumnStream, RowOrColumnStreamAdapter,
+    SendableRecordBatchStream,
+};
 pub use task::TaskContext;

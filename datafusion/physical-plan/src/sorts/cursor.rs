@@ -177,6 +177,10 @@ impl RowValues {
             _reservation: reservation,
         }
     }
+    /// get the size of row_values
+    pub fn size(&self) -> usize {
+        self.rows.size()
+    }
 }
 
 impl CursorValues for RowValues {

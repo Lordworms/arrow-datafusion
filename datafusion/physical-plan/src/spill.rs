@@ -37,6 +37,13 @@ use datafusion_execution::SendableRecordBatchStream;
 use crate::common::IPCWriter;
 use crate::stream::RecordBatchReceiverStream;
 
+/// spill format
+#[derive(Clone)]
+pub enum SpillFormat {
+    Row,
+    Column,
+}
+
 /// Read spilled batches from the disk
 ///
 /// `path` - temp file
@@ -46,11 +53,12 @@ pub(crate) fn read_spill_as_stream(
     path: RefCountedTempFile,
     schema: SchemaRef,
     buffer: usize,
+    format: SpillFormat,
 ) -> Result<SendableRecordBatchStream> {
     let mut builder = RecordBatchReceiverStream::builder(schema, buffer);
     let sender = builder.tx();
 
-    builder.spawn_blocking(move || read_spill(sender, path.path()));
+    builder.spawn_blocking(move || read_spill(sender, path.path(), format));
 
     Ok(builder.build())
 }
@@ -77,7 +85,11 @@ pub(crate) fn spill_record_batches(
     Ok(writer.num_rows)
 }
 
-fn read_spill(sender: Sender<Result<RecordBatch>>, path: &Path) -> Result<()> {
+fn read_spill(
+    sender: Sender<Result<RecordBatch>>,
+    path: &Path,
+    format: SpillFormat,
+) -> Result<()> {
     let file = BufReader::new(File::open(path)?);
     let reader = FileReader::try_new(file, None)?;
     for batch in reader {
@@ -177,6 +189,17 @@ fn count_array_data_memory_size(
     for child in array_data.child_data() {
         count_array_data_memory_size(child, counted_buffers, total_size);
     }
+}
+
+pub fn estimate_rows_size(batch: &RecordBatch) -> usize {
+    let record_batch_size = get_record_batch_memory_size(batch);
+    let num_rows = batch.num_rows();
+    if num_rows == 0 {
+        return 0;
+    }
+    let offsets_size = (num_rows + 1) * size_of::<usize>();
+    let row_overhead = offsets_size;
+    record_batch_size + row_overhead
 }
 
 #[cfg(test)]

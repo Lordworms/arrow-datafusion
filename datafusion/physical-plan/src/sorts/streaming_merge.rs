@@ -28,6 +28,7 @@ use arrow::datatypes::{DataType, SchemaRef};
 use arrow_array::*;
 use datafusion_common::{internal_err, Result};
 use datafusion_execution::memory_pool::MemoryReservation;
+use datafusion_execution::RowOrColumnStream;
 use datafusion_physical_expr_common::sort_expr::LexOrdering;
 
 macro_rules! primitive_merge_helper {
@@ -52,7 +53,7 @@ macro_rules! merge_helper {
 }
 
 pub struct StreamingMergeBuilder<'a> {
-    streams: Vec<SendableRecordBatchStream>,
+    streams: Vec<RowOrColumnStream>,
     schema: Option<SchemaRef>,
     expressions: &'a LexOrdering,
     metrics: Option<BaselineMetrics>,
@@ -85,7 +86,7 @@ impl<'a> StreamingMergeBuilder<'a> {
         }
     }
 
-    pub fn with_streams(mut self, streams: Vec<SendableRecordBatchStream>) -> Self {
+    pub fn with_streams(mut self, streams: Vec<RowOrColumnStream>) -> Self {
         self.streams = streams;
         self
     }

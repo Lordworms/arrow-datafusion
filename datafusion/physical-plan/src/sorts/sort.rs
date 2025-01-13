@@ -33,7 +33,7 @@ use crate::metrics::{
 };
 use crate::sorts::streaming_merge::StreamingMergeBuilder;
 use crate::spill::{
-    get_record_batch_memory_size, read_spill_as_stream, spill_record_batches,
+    get_record_batch_memory_size, read_spill_as_stream, spill_record_batches, SpillFormat,
 };
 use crate::stream::RecordBatchStreamAdapter;
 use crate::topk::TopK;
@@ -53,12 +53,16 @@ use datafusion_common::{internal_err, Result};
 use datafusion_execution::disk_manager::RefCountedTempFile;
 use datafusion_execution::memory_pool::{MemoryConsumer, MemoryReservation};
 use datafusion_execution::runtime_env::RuntimeEnv;
-use datafusion_execution::TaskContext;
+use datafusion_execution::{
+    RowOrColumn, RowOrColumnStream, RowOrColumnStreamAdapter, TaskContext,
+};
 use datafusion_physical_expr::LexOrdering;
 use datafusion_physical_expr_common::sort_expr::LexRequirement;
 
 use futures::{StreamExt, TryStreamExt};
 use log::{debug, trace};
+
+use arrow::row::Rows;
 
 struct ExternalSorterMetrics {
     /// metrics
@@ -202,7 +206,7 @@ impl ExternalSorterMetrics {
 ///
 ///  in_mem_batches
 /// ```
-struct ExternalSorter {
+pub struct ExternalSorter {
     // ========================================================================
     // PROPERTIES:
     // Fields that define the sorter's configuration and remain constant
@@ -225,7 +229,7 @@ struct ExternalSorter {
     // Fields that hold intermediate data during sorting
     // ========================================================================
     /// Potentially unsorted in memory buffer
-    in_mem_batches: Vec<RecordBatch>,
+    in_mem_rows: Vec<RowOrColumn>,
     /// if `Self::in_mem_batches` are sorted
     in_mem_batches_sorted: bool,
 
@@ -251,6 +255,8 @@ struct ExternalSorter {
     /// How much memory to reserve for performing in-memory sort/merges
     /// prior to spilling.
     sort_spill_reservation_bytes: usize,
+    /// serilize or deserilize Rows
+    converter: Option<RowConverter>,
 }
 
 impl ExternalSorter {
@@ -276,10 +282,16 @@ impl ExternalSorter {
         let merge_reservation =
             MemoryConsumer::new(format!("ExternalSorterMerge[{partition_id}]"))
                 .register(&runtime.memory_pool);
-
+        let fields = expr
+            .iter()
+            .map(|e| {
+                let data_type = e.expr.data_type(&schema)?;
+                Ok(SortField::new_with_options(data_type, e.options))
+            })
+            .collect::<Result<Vec<_>>>()?;
         Self {
             schema,
-            in_mem_batches: vec![],
+            in_mem_rows: vec![],
             in_mem_batches_sorted: true,
             spills: vec![],
             expr: expr.inner.into(),
@@ -291,6 +303,7 @@ impl ExternalSorter {
             batch_size,
             sort_spill_reservation_bytes,
             sort_in_place_threshold_bytes,
+            converter: RowConverter::new(fields)?,
         }
     }
 
@@ -302,9 +315,8 @@ impl ExternalSorter {
             return Ok(());
         }
         self.reserve_memory_for_merge()?;
-
-        let size = get_record_batch_memory_size(&input);
-
+        let rows = self.convert_record_batch(&input)?;
+        let size = rows.size();
         if self.reservation.try_grow(size).is_err() {
             let before = self.reservation.size();
             self.in_mem_sort().await?;
@@ -326,13 +338,37 @@ impl ExternalSorter {
             }
         }
 
-        self.in_mem_batches.push(input);
+        self.in_mem_rows.push(rows);
         self.in_mem_batches_sorted = false;
         Ok(())
     }
 
+    fn convert_record_batch(&self, batch: &RecordBatch) -> Result<Rows> {
+        let sort_columns = self
+            .expr
+            .iter()
+            .map(|expr| expr.evaluate_to_sort_column(&batch))
+            .collect::<Result<Vec<_>>>()?;
+        let columns =
+            sort_columns
+                .into_iter()
+                .fold(vec![], |mut columns, sort_column| {
+                    columns.push(sort_column.values);
+                    columns
+                });
+        Ok(self.converter.convert_columns(&columns)?)
+    }
+
     fn spilled_before(&self) -> bool {
         !self.spills.is_empty()
+    }
+
+    fn spill_format(&self) -> SpillFormat {
+        if self.converter.is_some() {
+            SpillFormat::Row
+        } else {
+            SpillFormat::Column
+        }
     }
 
     /// Returns the final sorted output of all batches inserted via
@@ -347,17 +383,22 @@ impl ExternalSorter {
     fn sort(&mut self) -> Result<SendableRecordBatchStream> {
         if self.spilled_before() {
             let mut streams = vec![];
-            if !self.in_mem_batches.is_empty() {
+            if !self.in_mem_rows.is_empty() {
                 let in_mem_stream =
                     self.in_mem_sort_stream(self.metrics.baseline.intermediate())?;
                 streams.push(in_mem_stream);
             }
-
+            let spill_format = self.spill_format();
             for spill in self.spills.drain(..) {
                 if !spill.path().exists() {
                     return internal_err!("Spill file {:?} does not exist", spill.path());
                 }
-                let stream = read_spill_as_stream(spill, Arc::clone(&self.schema), 2)?;
+                let stream = read_spill_as_stream(
+                    spill,
+                    Arc::clone(&self.schema),
+                    2,
+                    spill_format.clone(),
+                )?;
                 streams.push(stream);
             }
 
@@ -403,7 +444,7 @@ impl ExternalSorter {
     /// Returns the amount of memory freed.
     async fn spill(&mut self) -> Result<usize> {
         // we could always get a chance to free some memory as long as we are holding some
-        if self.in_mem_batches.is_empty() {
+        if self.in_mem_rows.is_empty() {
             return Ok(0);
         }
 
@@ -412,7 +453,7 @@ impl ExternalSorter {
         self.in_mem_sort().await?;
 
         let spill_file = self.runtime.disk_manager.create_tmp_file("Sorting")?;
-        let batches = std::mem::take(&mut self.in_mem_batches);
+        let rows = std::mem::take(&mut self.in_mem_rows);
         let spilled_rows = spill_record_batches(
             batches,
             spill_file.path().into(),
@@ -437,7 +478,7 @@ impl ExternalSorter {
         // allocation.
         self.merge_reservation.free();
 
-        self.in_mem_batches = self
+        self.in_mem_rows = self
             .in_mem_sort_stream(self.metrics.baseline.intermediate())?
             .try_collect()
             .await?;
@@ -518,7 +559,7 @@ impl ExternalSorter {
         &mut self,
         metrics: BaselineMetrics,
     ) -> Result<SendableRecordBatchStream> {
-        if self.in_mem_batches.is_empty() {
+        if self.in_mem_rows.is_empty() {
             return Ok(Box::pin(EmptyRecordBatchStream::new(Arc::clone(
                 &self.schema,
             ))));
@@ -529,29 +570,28 @@ impl ExternalSorter {
         let elapsed_compute = metrics.elapsed_compute().clone();
         let _timer = elapsed_compute.timer();
 
-        if self.in_mem_batches.len() == 1 {
-            let batch = self.in_mem_batches.swap_remove(0);
+        if self.in_mem_rows.len() == 1 {
+            let rows = self.in_mem_rows.swap_remove(0);
             let reservation = self.reservation.take();
-            return self.sort_batch_stream(batch, metrics, reservation);
+            return self.sort_batch_stream(rows, metrics, reservation);
         }
 
         // If less than sort_in_place_threshold_bytes, concatenate and sort in place
         if self.reservation.size() < self.sort_in_place_threshold_bytes {
             // Concatenate memory batches together and sort
             let batch = concat_batches(&self.schema, &self.in_mem_batches)?;
-            self.in_mem_batches.clear();
+            self.in_mem_rows.clear();
             self.reservation
                 .try_resize(get_record_batch_memory_size(&batch))?;
             let reservation = self.reservation.take();
             return self.sort_batch_stream(batch, metrics, reservation);
         }
 
-        let streams = std::mem::take(&mut self.in_mem_batches)
+        let streams = std::mem::take(&mut self.in_mem_rows)
             .into_iter()
-            .map(|batch| {
+            .map(|row| {
                 let metrics = self.metrics.baseline.intermediate();
-                let reservation =
-                    self.reservation.split(get_record_batch_memory_size(&batch));
+                let reservation = self.reservation.split(row.size());
                 let input = self.sort_batch_stream(batch, metrics, reservation)?;
                 Ok(spawn_buffered(input, 1))
             })
@@ -576,10 +616,10 @@ impl ExternalSorter {
     /// is released when the sort is complete
     fn sort_batch_stream(
         &self,
-        batch: RecordBatch,
+        batch: RowOrColumn,
         metrics: BaselineMetrics,
         reservation: MemoryReservation,
-    ) -> Result<SendableRecordBatchStream> {
+    ) -> Result<RowOrColumnStream> {
         assert_eq!(get_record_batch_memory_size(&batch), reservation.size());
         let schema = batch.schema();
 
@@ -587,14 +627,19 @@ impl ExternalSorter {
         let expressions: LexOrdering = self.expr.iter().cloned().collect();
         let stream = futures::stream::once(futures::future::lazy(move |_| {
             let timer = metrics.elapsed_compute().timer();
-            let sorted = sort_batch(&batch, &expressions, fetch)?;
+            let sorted = match batch {
+                RowOrColumn::Column(batch) => {
+                    RowOrColumn::Column(sort_batch(&batch, &expressions, fetch)?)
+                }
+                RowOrColumn::Row(rows) => RowOrColumn::Row(sort_row(rows, fetch)),
+            };
             timer.done();
             metrics.record_output(sorted.num_rows());
             drop(batch);
             drop(reservation);
             Ok(sorted)
         }));
-        Ok(Box::pin(RecordBatchStreamAdapter::new(schema, stream)))
+        Ok(Box::pin(RowOrColumnStreamAdapter::new(stream)))
     }
 
     /// If this sort may spill, pre-allocates
@@ -650,6 +695,12 @@ pub fn sort_batch(
         columns,
         &options,
     )?)
+}
+
+pub fn sort_row(rows: Rows, fetch: Option<usize>) -> Result<Rows> {
+    let mut row_data: Vec<_> = rows.into_iter().collect();
+    row_data.sort_unstable_by(|(_, a), (_, b)| a.cmp(b));
+    Ok(row_data.into())
 }
 
 #[inline]
@@ -1023,6 +1074,117 @@ impl ExecutionPlan for SortExec {
         } else {
             CardinalityEffect::LowerEqual
         }
+    }
+}
+
+pub struct ExternalSorterBuilder {
+    partition_id: usize,
+    schema: SchemaRef,
+    expr: LexOrdering,
+    batch_size: usize,
+    fetch: Option<usize>,
+    sort_spill_reservation_bytes: usize,
+    sort_in_place_threshold_bytes: usize,
+    metrics: ExecutionPlanMetricsSet,
+    runtime: Arc<RuntimeEnv>,
+}
+
+impl ExternalSorterBuilder {
+    pub fn new(partition_id: usize, schema: SchemaRef, expr: LexOrdering) -> Self {
+        Self {
+            partition_id,
+            schema,
+            expr,
+            batch_size: 0,
+            fetch: None,
+            sort_spill_reservation_bytes: 0,
+            sort_in_place_threshold_bytes: 0,
+            metrics: ExecutionPlanMetricsSet::new(),
+            runtime: Arc::new(RuntimeEnv::default()),
+        }
+    }
+
+    pub fn with_batch_size(mut self, batch_size: usize) -> Self {
+        self.batch_size = batch_size;
+        self
+    }
+
+    pub fn with_fetch(mut self, fetch: Option<usize>) -> Self {
+        self.fetch = fetch;
+        self
+    }
+
+    pub fn with_sort_spill_reservation_bytes(mut self, bytes: usize) -> Self {
+        self.sort_spill_reservation_bytes = bytes;
+        self
+    }
+
+    pub fn with_sort_in_place_threshold_bytes(mut self, bytes: usize) -> Self {
+        self.sort_in_place_threshold_bytes = bytes;
+        self
+    }
+
+    pub fn with_metrics(mut self, metrics: ExecutionPlanMetricsSet) -> Self {
+        self.metrics = metrics;
+        self
+    }
+
+    pub fn with_runtime(mut self, runtime: Arc<RuntimeEnv>) -> Self {
+        self.runtime = runtime;
+        self
+    }
+
+    pub fn build(self) -> Result<ExternalSorter> {
+        let metrics = ExternalSorterMetrics::new(&self.metrics, self.partition_id);
+        let reservation =
+            MemoryConsumer::new(format!("ExternalSorter[{}]", self.partition_id))
+                .with_can_spill(true)
+                .register(&self.runtime.memory_pool);
+
+        let merge_reservation =
+            MemoryConsumer::new(format!("ExternalSorterMerge[{}]", self.partition_id))
+                .register(&self.runtime.memory_pool);
+        let fields = self
+            .expr
+            .iter()
+            .map(|e| {
+                let data_type = e.expr.data_type(&self.schema)?;
+                Ok(SortField::new_with_options(data_type, e.options))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        // for single column, don't need to transform
+        let converter = if fields.len() == 1 {
+            None
+        } else {
+            Some(RowConverter::new(fields)?)
+        };
+        Ok(ExternalSorter {
+            schema: self.schema,
+            in_mem_rows: vec![],
+            in_mem_batches_sorted: true,
+            spills: vec![],
+            expr: self.expr.inner.into(),
+            metrics,
+            fetch: self.fetch,
+            reservation,
+            merge_reservation,
+            runtime: self.runtime,
+            batch_size: self.batch_size,
+            sort_spill_reservation_bytes: self.sort_spill_reservation_bytes,
+            sort_in_place_threshold_bytes: self.sort_in_place_threshold_bytes,
+            converter,
+        })
+    }
+}
+
+// Update ExternalSorter implementation
+impl ExternalSorter {
+    pub fn builder(
+        partition_id: usize,
+        schema: SchemaRef,
+        expr: LexOrdering,
+    ) -> ExternalSorterBuilder {
+        ExternalSorterBuilder::new(partition_id, schema, expr)
     }
 }
 

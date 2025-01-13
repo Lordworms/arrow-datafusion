@@ -19,6 +19,8 @@ use crate::spill::get_record_batch_memory_size;
 use arrow::compute::interleave;
 use arrow::datatypes::SchemaRef;
 use arrow::record_batch::RecordBatch;
+use arrow::row::Rows;
+use arrow_array::ArrayRef;
 use datafusion_common::Result;
 use datafusion_execution::memory_pool::MemoryReservation;
 use std::sync::Arc;
@@ -31,14 +33,14 @@ struct BatchCursor {
     row_idx: usize,
 }
 
-/// Provides an API to incrementally build a [`RecordBatch`] from partitioned [`RecordBatch`]
+/// Provides an API to incrementally build a [`RecordBatch`] from partitioned [`Rows`]
 #[derive(Debug)]
 pub struct BatchBuilder {
     /// The schema of the RecordBatches yielded by this stream
     schema: SchemaRef,
 
     /// Maintain a list of [`RecordBatch`] and their corresponding stream
-    batches: Vec<(usize, RecordBatch)>,
+    rows: Vec<(usize, Vec<ArrayRef>)>,
 
     /// Accounts for memory used by buffered batches
     reservation: MemoryReservation,
@@ -61,7 +63,7 @@ impl BatchBuilder {
     ) -> Self {
         Self {
             schema,
-            batches: Vec::with_capacity(stream_count * 2),
+            rows: Vec::with_capacity(stream_count * 2),
             cursors: vec![BatchCursor::default(); stream_count],
             indices: Vec::with_capacity(batch_size),
             reservation,
@@ -73,7 +75,7 @@ impl BatchBuilder {
         self.reservation
             .try_grow(get_record_batch_memory_size(&batch))?;
         let batch_idx = self.batches.len();
-        self.batches.push((stream_idx, batch));
+        self.rows.push((stream_idx, batch));
         self.cursors[stream_idx] = BatchCursor {
             batch_idx,
             row_idx: 0,
@@ -117,7 +119,7 @@ impl BatchBuilder {
         let columns = (0..self.schema.fields.len())
             .map(|column_idx| {
                 let arrays: Vec<_> = self
-                    .batches
+                    .rows
                     .iter()
                     .map(|(_, batch)| batch.column(column_idx).as_ref())
                     .collect();

@@ -21,9 +21,10 @@ use crate::{PhysicalExpr, PhysicalSortExpr};
 use arrow::array::Array;
 use arrow::datatypes::Schema;
 use arrow::record_batch::RecordBatch;
-use arrow::row::{RowConverter, SortField};
+use arrow::row::{RowConverter, Rows, SortField};
 use datafusion_common::Result;
 use datafusion_execution::memory_pool::MemoryReservation;
+use datafusion_execution::{RowOrColumn, RowOrColumnStream};
 use datafusion_physical_expr_common::sort_expr::LexOrdering;
 use futures::stream::{Fuse, StreamExt};
 use std::marker::PhantomData;
@@ -49,9 +50,9 @@ pub trait PartitionedStream: std::fmt::Debug + Send {
     ) -> Poll<Option<Self::Output>>;
 }
 
-/// A new type wrapper around a set of fused [`SendableRecordBatchStream`]
+/// A new type wrapper around a set of fused [`RowOrColumnStream`]
 /// that implements debug, and skips over empty [`RecordBatch`]
-struct FusedStreams(Vec<Fuse<SendableRecordBatchStream>>);
+struct FusedStreams(Vec<Fuse<RowOrColumnStream>>);
 
 impl std::fmt::Debug for FusedStreams {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -66,7 +67,7 @@ impl FusedStreams {
         &mut self,
         cx: &mut Context<'_>,
         stream_idx: usize,
-    ) -> Poll<Option<Result<RecordBatch>>> {
+    ) -> Poll<Option<Result<RowOrColumn>>> {
         loop {
             match ready!(self.0[stream_idx].poll_next_unpin(cx)) {
                 Some(Ok(b)) if b.num_rows() == 0 => continue,
@@ -94,7 +95,7 @@ impl RowCursorStream {
     pub fn try_new(
         schema: &Schema,
         expressions: &LexOrdering,
-        streams: Vec<SendableRecordBatchStream>,
+        streams: Vec<RowOrColumnStream>,
         reservation: MemoryReservation,
     ) -> Result<Self> {
         let sort_fields = expressions
@@ -107,6 +108,7 @@ impl RowCursorStream {
 
         let streams = streams.into_iter().map(|s| s.fuse()).collect();
         let converter = RowConverter::new(sort_fields)?;
+
         Ok(Self {
             converter,
             reservation,
@@ -130,6 +132,8 @@ impl RowCursorStream {
         rows_reservation.try_grow(rows.size())?;
         Ok(RowValues::new(rows, rows_reservation))
     }
+
+    fn row_values(&mut self, rows: )
 }
 
 impl PartitionedStream for RowCursorStream {

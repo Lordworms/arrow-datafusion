@@ -15,11 +15,15 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use arrow::{datatypes::SchemaRef, record_batch::RecordBatch};
-use datafusion_common::Result;
+use arrow::{datatypes::SchemaRef, record_batch::RecordBatch, row::Rows};
+use datafusion_common::{DataFusionError, Result};
 use futures::Stream;
-use std::pin::Pin;
-
+use pin_project_lite::pin_project;
+use std::{
+    fmt,
+    pin::Pin,
+    task::{Context, Poll},
+};
 /// Trait for types that stream [RecordBatch]
 ///
 /// See [`SendableRecordBatchStream`] for more details.
@@ -51,3 +55,55 @@ pub trait RecordBatchStream: Stream<Item = Result<RecordBatch>> {
 /// [`Stream`]s there is no mechanism to prevent callers polling  so returning
 /// `Ready(None)` is recommended.
 pub type SendableRecordBatchStream = Pin<Box<dyn RecordBatchStream + Send>>;
+
+pub enum RowOrColumn {
+    Row(Rows),
+    Column(RecordBatch),
+}
+
+/// Contains a Rows or a Recordbatch
+pub type RowOrColumnStream = Pin<Box<dyn Stream<Item = Result<RowOrColumn>> + Send>>;
+
+pin_project! {
+    pub struct RowOrColumnStreamAdapter<S> {
+        #[pin]
+        stream: S,
+    }
+}
+
+impl<S> RowOrColumnStreamAdapter<S> {
+    pub fn new(stream: S) -> Self {
+        Self { stream }
+    }
+}
+
+impl<S> fmt::Debug for RowOrColumnStreamAdapter<S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RowOrColumnStreamAdapter").finish()
+    }
+}
+
+impl<S> Stream for RowOrColumnStreamAdapter<S>
+where
+    S: Stream<Item = Result<RowOrColumn>> + Unpin,
+{
+    type Item = Result<RowOrColumn, ()>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+        this.stream.poll_next(cx)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.stream.size_hint()
+    }
+}
+
+impl<S> From<RowOrColumnStreamAdapter<S>> for RowOrColumnStream
+where
+    S: Stream<Item = Result<RowOrColumn, DataFusionError>> + Send + 'static,
+{
+    fn from(adapter: RowOrColumnStreamAdapter<S>) -> Self {
+        Box::pin(adapter)
+    }
+}
