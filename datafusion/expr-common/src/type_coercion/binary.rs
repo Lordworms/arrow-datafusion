@@ -614,7 +614,11 @@ pub fn try_type_union_resolution_with_struct(
     let mut keys_string: Option<String> = None;
     for data_type in data_types {
         if let DataType::Struct(fields) = data_type {
-            let keys = fields.iter().map(|f| f.name().to_owned()).join(",");
+            let keys = fields
+                .iter()
+                .map(|f| f.name().to_owned())
+                .sorted()
+                .join(",");
             if let Some(ref k) = keys_string {
                 if *k != keys {
                     return exec_err!("Expect same keys for struct type but got mismatched pair {} and {}", *k, keys);
@@ -671,7 +675,6 @@ pub fn try_type_union_resolution_with_struct(
         }
         final_struct_types.push(DataType::Struct(new_fields.into()))
     }
-
     Ok(final_struct_types)
 }
 

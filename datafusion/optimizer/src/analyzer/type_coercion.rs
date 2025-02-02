@@ -19,7 +19,7 @@
 
 use std::sync::Arc;
 
-use datafusion_expr::binary::BinaryTypeCoercer;
+use datafusion_expr::binary::{try_type_union_resolution_with_struct, BinaryTypeCoercer};
 use itertools::izip;
 
 use arrow::datatypes::{DataType, Field, IntervalUnit, Schema};
@@ -843,7 +843,7 @@ fn coerce_case_expression(case: Case, schema: &DFSchema) -> Result<Case> {
         .as_ref()
         .map(|expr| expr.get_type(schema))
         .transpose()?;
-    let then_types = case
+    let mut then_types = case
         .when_then_expr
         .iter()
         .map(|(_when, then)| then.get_type(schema))
@@ -853,7 +853,6 @@ fn coerce_case_expression(case: Case, schema: &DFSchema) -> Result<Case> {
         .as_ref()
         .map(|expr| expr.get_type(schema))
         .transpose()?;
-
     // find common coercible types
     let case_when_coerce_type = case_type
         .as_ref()
@@ -873,6 +872,21 @@ fn coerce_case_expression(case: Case, schema: &DFSchema) -> Result<Case> {
             })
         })
         .transpose()?;
+    // do checks
+    if then_types.iter().any(|t| matches!(t, DataType::Struct(_)))
+        || else_type
+            .as_ref()
+            .is_some_and(|t| matches!(t, DataType::Struct(_)))
+    {
+        if let Some(ref else_t) = else_type {
+            then_types.push(else_t.clone());
+            try_type_union_resolution_with_struct(&then_types).map_err(|_| {
+                DataFusionError::Execution("failed to do coercsion for case".to_string())
+            })?;
+            then_types.pop();
+        }
+    }
+
     let then_else_coerce_type =
         get_coerce_type_for_case_expression(&then_types, else_type.as_ref()).ok_or_else(
             || {
@@ -882,7 +896,6 @@ fn coerce_case_expression(case: Case, schema: &DFSchema) -> Result<Case> {
                 )
             },
         )?;
-
     // do cast if found common coercible types
     let case_expr = case
         .expr

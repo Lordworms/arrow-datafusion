@@ -851,3 +851,27 @@ FROM (
 ----
 NULL false
 foo true
+
+statement ok
+drop table t
+
+statement ok
+create table t as values
+(
+ { 'foo': 'baz' }, 
+ { 'xxx': arrow_cast('blarg', 'Utf8View') },
+ { 'name': 'Alice', 'age': 20 },
+ { 'age': 30, 'name': 'Bob' }
+);
+
+query error DataFusion error: Execution error: Expect same keys for struct type but got mismatched pair foo and xxx
+select column1 from t UNION ALL select column2 from t;
+
+query ?
+select column3 from t UNION ALL select column4 from t order by column3;
+----
+{name: 30, age: Bob}
+{name: Alice, age: 20}
+
+statement ok
+drop table t

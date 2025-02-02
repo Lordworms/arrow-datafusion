@@ -58,6 +58,7 @@ use datafusion_common::{
     FunctionalDependencies, ParamValues, Result, ScalarValue, TableReference,
     UnnestOptions,
 };
+use datafusion_expr_common::type_coercion::binary::try_type_union_resolution_with_struct;
 use indexmap::IndexSet;
 
 // backwards compatibility
@@ -2695,7 +2696,15 @@ impl Union {
                     // TODO apply type coercion here, or document why it's better to defer
                     // temporarily use the data type from the left input and later rely on the analyzer to
                     // coerce the two schemas into a common one.
-                    first_field.data_type()
+                    let first_type = first_field.data_type();
+                    if matches!(first_type, DataType::Struct(_)) {
+                        let types: Vec<DataType> =
+                            fields.iter().map(|f| f.data_type().clone()).collect();
+                        &try_type_union_resolution_with_struct(&types)
+                            .map(|types| types[0].clone())?
+                    } else {
+                        first_type
+                    }
                 } else {
                     fields.iter().skip(1).try_fold(
                         first_field.data_type(),
@@ -2728,7 +2737,6 @@ impl Union {
         // Functional Dependencies doesn't preserve after UNION operation
         let schema = DFSchema::new_with_metadata(union_fields, union_schema_metadata)?;
         let schema = Arc::new(schema);
-
         Ok(schema)
     }
 }
