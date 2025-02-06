@@ -161,3 +161,13 @@ create table records (timestamp timestamp, value float) as values (
     '2021-01-01 00:00:00', 1.0,
     '2021-01-01 00:00:00', 2.0
 );
+
+
+statement ok
+create table a(timestamp int, birthday int);
+
+query error DataFusion error: Schema error: No field named timetamp\. Did you mean 'a\.timestamp'\?\.
+select timetamp from a;
+
+query error DataFusion error: Schema error: No field named dadsada\. Valid fields are a\.timestamp, a\.birthday\.
+select dadsada from a;
